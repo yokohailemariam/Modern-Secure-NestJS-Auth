@@ -9,6 +9,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interfceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interfceptors/transform.interfceptor';
 import { PrismaModule } from '@prisma/prisma.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -18,6 +19,13 @@ import { PrismaModule } from '@prisma/prisma.module';
       validationSchema,
       envFilePath: ['.env.local', '.env'],
     }),
+    ThrottlerModule.forRoot([
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 20,
+      },
+    ]),
     PrismaModule,
     AuthModule,
     UserModule,
