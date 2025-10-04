@@ -16,6 +16,7 @@ import {
   JwtRefreshPayload,
 } from './interfaces/jwt.payload.interface';
 import { PrismaService } from '@prisma/prisma.service';
+import { SocialAuthDto, SocialAuthResponseDto } from './dto/social-auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -248,5 +249,159 @@ export class AuthService {
     }
 
     return null;
+  }
+
+  async googleLogin(
+    socialAuthDto: SocialAuthDto,
+    deviceId?: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<SocialAuthResponseDto> {
+    let user = await this.prisma.user.findUnique({
+      where: { googleId: socialAuthDto.googleId },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      user = await this.prisma.user.findUnique({
+        where: { email: socialAuthDto.email },
+      });
+
+      if (user) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            googleId: socialAuthDto.googleId,
+            avatar: socialAuthDto.avatar || user.avatar,
+            firstName: user.firstName || socialAuthDto.firstName,
+            lastName: user.lastName || socialAuthDto.lastName,
+          },
+        });
+      } else {
+        user = await this.prisma.user.create({
+          data: {
+            email: socialAuthDto.email,
+            googleId: socialAuthDto.googleId,
+            firstName: socialAuthDto.firstName,
+            lastName: socialAuthDto.lastName,
+            avatar: socialAuthDto.avatar,
+            provider: 'GOOGLE',
+            isActive: true,
+            role: 'USER',
+            password: '',
+          },
+        });
+        isNewUser = true;
+      }
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        avatar: user.avatar,
+        provider: user.provider,
+      },
+      isNewUser,
+    };
+  }
+
+  // Generic social login handler (for future providers)
+  async socialLogin(
+    provider: 'GOOGLE' | 'FACEBOOK' | 'TWITTER' | 'GITHUB',
+    socialAuthDto: SocialAuthDto,
+    deviceId?: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<SocialAuthResponseDto> {
+    const providerIdField =
+      `${provider.toLowerCase()}Id` as keyof typeof socialAuthDto;
+    const providerId = socialAuthDto[providerIdField] as string;
+
+    let user = await this.prisma.user.findFirst({
+      where: { [providerIdField]: providerId },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      user = await this.prisma.user.findUnique({
+        where: { email: socialAuthDto.email },
+      });
+
+      if (user) {
+        // Link social account to existing user
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            [providerIdField]: providerId,
+            avatar: socialAuthDto.avatar || user.avatar,
+            firstName: user.firstName || socialAuthDto.firstName,
+            lastName: user.lastName || socialAuthDto.lastName,
+          },
+        });
+      } else {
+        // Create new user
+        user = await this.prisma.user.create({
+          data: {
+            email: socialAuthDto.email,
+            [providerIdField]: providerId,
+            firstName: socialAuthDto.firstName,
+            lastName: socialAuthDto.lastName,
+            avatar: socialAuthDto.avatar,
+            provider: provider,
+            isActive: true,
+            role: 'USER',
+            password: '',
+          },
+        });
+        isNewUser = true;
+      }
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        avatar: user.avatar,
+        provider: user.provider,
+      },
+      isNewUser,
+    };
   }
 }

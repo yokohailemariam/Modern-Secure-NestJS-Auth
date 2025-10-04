@@ -14,6 +14,14 @@ enum Role {
   MODERATOR
 }
 
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+  TWITTER
+  GITHUB
+}
+
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
@@ -22,6 +30,14 @@ model User {
   lastName  String? @map("last_name")
   role      Role    @default(USER)
   isActive  Boolean @default(true) @map("is_active")
+
+  // OAuth fields
+  googleId   String?      @unique
+  facebookId String?      @unique
+  twitterId  String?      @unique
+  githubId   String?      @unique
+  provider   AuthProvider @default(LOCAL)
+  avatar     String?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

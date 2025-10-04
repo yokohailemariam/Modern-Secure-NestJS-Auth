@@ -7,6 +7,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Get,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -18,6 +19,8 @@ import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Public } from './decorator/public.decorator';
 import { CurrentUser } from './decorator/current-user.decorator';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { SocialAuthDto } from './dto/social-auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -177,5 +180,77 @@ export class AuthController {
     };
 
     return value * multipliers[unit];
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Initiate Google OAuth login' })
+  async googleAuth() {}
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  async googleAuthCallback(
+    @CurrentUser() user: any,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const socialAuthDto: SocialAuthDto = {
+      googleId: user.googleId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.avatar,
+      provider: 'GOOGLE',
+    };
+
+    const result = await this.authService.googleLogin(
+      socialAuthDto,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    this.setRefreshTokenCookie(res, result.refreshToken);
+
+    const frontendUrl = this.config.get<string>('frontendUrl');
+
+    res.redirect(
+      `${frontendUrl}/auth/callback?token=${result.accessToken}&isNewUser=${result.isNewUser}`,
+    );
+  }
+  @Public()
+  @Post('google/token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange Google token for app tokens' })
+  async googleTokenLogin(
+    @Body() socialAuthDto: SocialAuthDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const result = await this.authService.googleLogin(
+      socialAuthDto,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    this.setRefreshTokenCookie(res, result.refreshToken);
+
+    return {
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      user: result.user,
+      isNewUser: result.isNewUser,
+    };
   }
 }
