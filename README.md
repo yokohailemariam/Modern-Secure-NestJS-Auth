@@ -20,9 +20,9 @@ A production-ready authentication system built with NestJS, Prisma, and PostgreS
 
 ## Tech Stack
 
-- **Backend:** NestJS 10.x
+- **Backend:** NestJS 10.0
 - **Database:** PostgreSQL
-- **ORM:** Prisma 5.x
+- **ORM:** Prisma 6.16.3
 - **Authentication:** Passport JWT
 - **Validation:** class-validator
 - **Documentation:** Swagger/OpenAPI
