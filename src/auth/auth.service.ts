@@ -21,6 +21,12 @@ import { EmailService } from '@src/email/email.service';
 import * as crypto from 'crypto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { CurrentUser } from './decorator/current-user.decorator';
+import {
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  ValidateResetTokenDto,
+} from './dto/password-reset.dto';
 
 @Injectable()
 export class AuthService {
@@ -313,7 +319,6 @@ export class AuthService {
       );
     }
 
-    // Update user as verified
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -334,7 +339,6 @@ export class AuthService {
     });
 
     if (!user) {
-      // Don't reveal if user exists or not (security)
       return {
         message: 'If the email exists, a verification link has been sent',
       };
@@ -344,14 +348,12 @@ export class AuthService {
       throw new BadRequestException('Email already verified');
     }
 
-    // Check if last verification email was sent recently (prevent spam)
     if (user.emailVerificationExpires) {
       const timeSinceLastEmail =
         Date.now() -
         (new Date(user.emailVerificationExpires).getTime() -
           24 * 60 * 60 * 1000);
       if (timeSinceLastEmail < 60000) {
-        // 1 minute cooldown
         throw new BadRequestException(
           'Please wait before requesting another verification email',
         );
@@ -376,6 +378,213 @@ export class AuthService {
       email: userData.email,
       isVerified: userData.isEmailVerified,
     };
+  }
+
+  private generateResetToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    const { email } = forgotPasswordDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return {
+        message: 'If the email exists, a password reset link has been sent',
+      };
+    }
+
+    if (
+      user.passwordResetAttempts >= 5 &&
+      user.passwordResetAttemptsExpires &&
+      new Date() < user.passwordResetAttemptsExpires
+    ) {
+      throw new BadRequestException(
+        'Too many password reset requests. Please try again later.',
+      );
+    }
+
+    const resetAttempts =
+      user.passwordResetAttemptsExpires &&
+      new Date() > user.passwordResetAttemptsExpires
+        ? 1
+        : (user.passwordResetAttempts || 0) + 1;
+
+    const token = this.generateResetToken();
+    const expires = new Date(Date.now() + 60 * 60 * 1000);
+    const attemptsExpires = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: token,
+        passwordResetExpires: expires,
+        passwordResetAttempts: resetAttempts,
+        passwordResetAttemptsExpires: attemptsExpires,
+      },
+    });
+
+    await this.emailService.sendPasswordResetEmail(
+      user.email,
+      token,
+      user.firstName,
+    );
+
+    return {
+      message: 'If the email exists, a password reset link has been sent',
+    };
+  }
+
+  async validateResetToken(validateTokenDto: ValidateResetTokenDto): Promise<{
+    valid: boolean;
+    message: string;
+    email?: string;
+  }> {
+    const { token } = validateTokenDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { passwordResetToken: token },
+      select: {
+        email: true,
+        passwordResetExpires: true,
+      },
+    });
+
+    if (!user) {
+      return {
+        valid: false,
+        message: 'Invalid or expired reset token',
+      };
+    }
+
+    if (user.passwordResetExpires && new Date() > user.passwordResetExpires) {
+      return {
+        valid: false,
+        message: 'Reset token has expired. Please request a new one.',
+      };
+    }
+
+    return {
+      valid: true,
+      message: 'Token is valid',
+      email: user.email,
+    };
+  }
+
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    const { token, newPassword } = resetPasswordDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { passwordResetToken: token },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (user.passwordResetExpires && new Date() > user.passwordResetExpires) {
+      throw new BadRequestException(
+        'Reset token has expired. Please request a new one.',
+      );
+    }
+
+    if (user.password) {
+      const isSamePassword = await this.userService.validatePassword(
+        newPassword,
+        user.password,
+      );
+      if (isSamePassword) {
+        throw new BadRequestException(
+          'New password must be different from your previous password',
+        );
+      }
+    }
+
+    await this.userService.updatePassword(user.id, newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        passwordResetAttempts: 0,
+        passwordResetAttemptsExpires: null,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    await this.logoutAll(user.id);
+
+    await this.emailService.sendPasswordChangedNotification(
+      user.email,
+      user.firstName,
+    );
+
+    return {
+      message:
+        'Password reset successfully. Please log in with your new password.',
+    };
+  }
+
+  async changePassword(
+    userId: string,
+    changePasswordDto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.password) {
+      const isCurrentPasswordValid = await this.userService.validatePassword(
+        currentPassword,
+        user.password,
+      );
+
+      if (!isCurrentPasswordValid) {
+        throw new BadRequestException('Current password is incorrect');
+      }
+
+      const isSamePassword = await this.userService.validatePassword(
+        newPassword,
+        user.password,
+      );
+      if (isSamePassword) {
+        throw new BadRequestException(
+          'New password must be different from your current password',
+        );
+      }
+    }
+
+    await this.userService.updatePassword(user.id, newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    await this.logoutAll(user.id);
+
+    await this.emailService.sendPasswordChangedNotification(
+      user.email,
+      user.firstName,
+    );
+
+    return { message: 'Password changed successfully. Please log in again.' };
   }
 
   async googleLogin(
@@ -475,7 +684,6 @@ export class AuthService {
       });
 
       if (user) {
-        // Link social account to existing user
         user = await this.prisma.user.update({
           where: { id: user.id },
           data: {
@@ -486,7 +694,6 @@ export class AuthService {
           },
         });
       } else {
-        // Create new user
         user = await this.prisma.user.create({
           data: {
             email: socialAuthDto.email,

@@ -27,6 +27,13 @@ import { CurrentUser } from './decorator/current-user.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { SocialAuthDto } from './dto/social-auth.dto';
 import { ResendVerificationDto, VerifyEmailDto } from './dto/verify-email.dto';
+import {
+  ChangePasswordDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  ValidateResetTokenDto,
+} from './dto/password-reset.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -305,5 +312,94 @@ export class AuthController {
       user: result.user,
       isNewUser: result.isNewUser,
     };
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Request password reset',
+    description: 'Send password reset link to user email',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'If email exists, password reset link has been sent',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many requests',
+  })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Public()
+  @Post('validate-reset-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Validate password reset token',
+    description: 'Check if reset token is valid and not expired',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Token validation result',
+    schema: {
+      example: {
+        valid: true,
+        message: 'Token is valid',
+        email: 'user@example.com',
+      },
+    },
+  })
+  async validateResetToken(@Body() validateTokenDto: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(validateTokenDto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // Max 5 attempts per minute
+  @ApiOperation({
+    summary: 'Reset password with token',
+    description: 'Reset user password using the token from email',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired token, or weak password',
+  })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Change password (authenticated)',
+    description: 'Change password for currently logged in user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password changed successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Current password incorrect or new password too weak',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized',
+  })
+  async changePassword(
+    @CurrentUser() user: any,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.id, changePasswordDto);
   }
 }

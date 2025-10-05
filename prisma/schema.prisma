@@ -36,6 +36,13 @@ model User {
   emailVerificationToken   String?   @unique
   emailVerificationExpires DateTime?
 
+  // Password Reset Fields
+  passwordResetToken           String?   @unique
+  passwordResetExpires         DateTime?
+  passwordResetAttempts        Int       @default(0)
+  passwordResetAttemptsExpires DateTime?
+  passwordChangedAt            DateTime?
+
   // OAuth fields
   googleId   String?      @unique
   facebookId String?      @unique
@@ -52,6 +59,7 @@ model User {
 
   @@index([email])
   @@index([emailVerificationToken])
+  @@index([passwordResetToken])
   @@map("users")
 }
 

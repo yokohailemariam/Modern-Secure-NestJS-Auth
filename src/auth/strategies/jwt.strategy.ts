@@ -27,6 +27,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    if (user.passwordChangedAt) {
+      const tokenIssuedAt = new Date(payload.iat * 1000);
+      if (user.passwordChangedAt > tokenIssuedAt) {
+        throw new UnauthorizedException(
+          'Password was recently changed. Please log in again.',
+        );
+      }
+    }
+
     return {
       id: user.id,
       email: user.email,
