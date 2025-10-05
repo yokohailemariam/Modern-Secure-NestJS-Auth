@@ -10,6 +10,7 @@ import { LoggingInterceptor } from './common/interfceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interfceptors/transform.interfceptor';
 import { PrismaModule } from '@prisma/prisma.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -21,14 +22,25 @@ import { ThrottlerModule } from '@nestjs/throttler';
     }),
     ThrottlerModule.forRoot([
       {
+        name: 'short',
+        ttl: 1000,
+        limit: 3,
+      },
+      {
         name: 'medium',
         ttl: 10000,
         limit: 20,
+      },
+      {
+        name: 'long',
+        ttl: 60000,
+        limit: 100,
       },
     ]),
     PrismaModule,
     AuthModule,
     UserModule,
+    EmailModule,
   ],
   providers: [
     {

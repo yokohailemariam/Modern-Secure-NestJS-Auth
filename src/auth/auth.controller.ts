@@ -14,13 +14,19 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Public } from './decorator/public.decorator';
 import { CurrentUser } from './decorator/current-user.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { SocialAuthDto } from './dto/social-auth.dto';
+import { ResendVerificationDto, VerifyEmailDto } from './dto/verify-email.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -180,6 +186,53 @@ export class AuthController {
     };
 
     return value * multipliers[unit];
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify email address',
+    description: 'Verify user email using the token sent to their email',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Email verified successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired token',
+  })
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend verification email',
+    description: 'Request a new verification email to be sent',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email sent',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Email already verified or invalid email',
+  })
+  async resendVerification(@Body() resendDto: ResendVerificationDto) {
+    return this.authService.resendVerificationEmail(resendDto.email);
+  }
+
+  // Optional: Add endpoint to check verification status
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('verification-status')
+  @ApiOperation({ summary: 'Check email verification status' })
+  async getVerificationStatus(@CurrentUser() user: any) {
+    return this.authService.getVerificationStatus(user.id);
   }
 
   @Public()

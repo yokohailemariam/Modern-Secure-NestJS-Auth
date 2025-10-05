@@ -17,6 +17,10 @@ import {
 } from './interfaces/jwt.payload.interface';
 import { PrismaService } from '@prisma/prisma.service';
 import { SocialAuthDto, SocialAuthResponseDto } from './dto/social-auth.dto';
+import { EmailService } from '@src/email/email.service';
+import * as crypto from 'crypto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { CurrentUser } from './decorator/current-user.decorator';
 
 @Injectable()
 export class AuthService {
@@ -25,10 +29,14 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
     const user = await this.userService.create(registerDto);
+
+    await this.sendVerificationEmail(user.id, user.email, user.firstName);
+
     const tokens = await this.generateTokens(user.id, user.email, user.role);
 
     return {
@@ -67,6 +75,11 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('Account is inactive');
     }
+    /*
+    if (!user.isEmailVerified) {
+      throw new UnauthorizedException('Please verify your email before logging in');
+    }
+    */
 
     const tokens = await this.generateTokens(
       user.id,
@@ -249,6 +262,120 @@ export class AuthService {
     }
 
     return null;
+  }
+
+  private generateVerificationToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  async sendVerificationEmail(
+    userId: string,
+    email: string,
+    firstName?: string,
+  ): Promise<void> {
+    const token = this.generateVerificationToken();
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        emailVerificationToken: token,
+        emailVerificationExpires: expires,
+      },
+    });
+
+    await this.emailService.sendVerificationEmail(email, token, firstName);
+  }
+
+  async verifyEmail(
+    verifyEmailDto: VerifyEmailDto,
+  ): Promise<{ message: string }> {
+    const { token } = verifyEmailDto;
+
+    const user = await this.prisma.user.findUnique({
+      where: { emailVerificationToken: token },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    if (
+      user.emailVerificationExpires &&
+      new Date() > user.emailVerificationExpires
+    ) {
+      throw new BadRequestException(
+        'Verification token has expired. Please request a new one.',
+      );
+    }
+
+    // Update user as verified
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isEmailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpires: null,
+      },
+    });
+
+    await this.emailService.sendWelcomeEmail(user.email, user.firstName);
+
+    return { message: 'Email verified successfully' };
+  }
+
+  async resendVerificationEmail(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Don't reveal if user exists or not (security)
+      return {
+        message: 'If the email exists, a verification link has been sent',
+      };
+    }
+
+    if (user.isEmailVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    // Check if last verification email was sent recently (prevent spam)
+    if (user.emailVerificationExpires) {
+      const timeSinceLastEmail =
+        Date.now() -
+        (new Date(user.emailVerificationExpires).getTime() -
+          24 * 60 * 60 * 1000);
+      if (timeSinceLastEmail < 60000) {
+        // 1 minute cooldown
+        throw new BadRequestException(
+          'Please wait before requesting another verification email',
+        );
+      }
+    }
+
+    await this.sendVerificationEmail(user.id, user.email, user.firstName);
+
+    return { message: 'Verification email sent' };
+  }
+
+  async getVerificationStatus(@CurrentUser() user: any) {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        isEmailVerified: true,
+        email: true,
+      },
+    });
+
+    return {
+      email: userData.email,
+      isVerified: userData.isEmailVerified,
+    };
   }
 
   async googleLogin(

@@ -31,6 +31,11 @@ model User {
   role      Role    @default(USER)
   isActive  Boolean @default(true) @map("is_active")
 
+  // Email Verification Fields
+  isEmailVerified          Boolean   @default(false)
+  emailVerificationToken   String?   @unique
+  emailVerificationExpires DateTime?
+
   // OAuth fields
   googleId   String?      @unique
   facebookId String?      @unique
@@ -45,6 +50,8 @@ model User {
   // Relations
   refreshTokens RefreshToken[]
 
+  @@index([email])
+  @@index([emailVerificationToken])
   @@map("users")
 }
 
