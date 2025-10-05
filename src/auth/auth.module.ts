@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { EmailModule } from '@src/email/email.module';
 import { ConfigModule } from '@nestjs/config';
+import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ConfigModule } from '@nestjs/config';
     JwtStrategy,
     JwtRefreshStrategy,
     GoogleStrategy,
+    AccountLockoutService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

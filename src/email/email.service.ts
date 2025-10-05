@@ -138,4 +138,55 @@ export class EmailService {
     `,
     });
   }
+
+  // Add this method to your EmailService
+
+  async sendAccountLockedNotification(
+    email: string,
+    lockedUntil: Date,
+    firstName?: string,
+  ): Promise<void> {
+    const minutesLocked = Math.ceil(
+      (lockedUntil.getTime() - Date.now()) / (60 * 1000),
+    );
+
+    // Actual email implementation (uncomment when ready):
+    await this.transporter.sendMail({
+      from: this.config.get('email.from'),
+      to: email,
+      subject: '🔒 Account Locked - Security Alert',
+      html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #dc3545; color: white; padding: 20px; border-radius: 5px 5px 0 0;">
+          <h2 style="margin: 0;">🔒 Account Locked</h2>
+        </div>
+        <div style="background-color: #f8f9fa; padding: 20px;">
+          <p>Hi ${firstName || 'there'},</p>
+          <p><strong>Your account has been temporarily locked</strong> due to multiple failed login attempts.</p>
+          
+          <div style="background-color: white; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Locked until:</strong> ${lockedUntil.toUTCString()}</p>
+            <p style="margin: 10px 0 0 0;"><strong>Time remaining:</strong> ${minutesLocked} minutes</p>
+          </div>
+          
+          <p><strong>If this wasn't you:</strong></p>
+          <ol>
+            <li>Wait until the lock expires</li>
+            <li>Reset your password immediately</li>
+            <li>Contact support if you need immediate assistance</li>
+          </ol>
+          
+          <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #856404;"><strong>Security Tips:</strong></p>
+            <ul style="margin: 10px 0 0 0; color: #856404;">
+              <li>Never share your password</li>
+              <li>Use a strong, unique password</li>
+              <li>Enable two-factor authentication</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    `,
+    });
+  }
 }

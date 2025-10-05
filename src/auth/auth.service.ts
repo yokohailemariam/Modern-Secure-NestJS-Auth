@@ -27,6 +27,7 @@ import {
   ResetPasswordDto,
   ValidateResetTokenDto,
 } from './dto/password-reset.dto';
+import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
 
 @Injectable()
 export class AuthService {
@@ -36,6 +37,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly accountLockoutService: AccountLockoutService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
@@ -69,23 +71,81 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check if account is locked
+    const lockStatus = await this.accountLockoutService.isAccountLocked(
+      user.id,
+    );
+
+    if (lockStatus.isLocked) {
+      const minutesRemaining = Math.ceil(
+        (lockStatus.lockedUntil.getTime() - Date.now()) / (60 * 1000),
+      );
+
+      throw new UnauthorizedException(
+        `Account is locked due to too many failed login attempts. ` +
+          `Please try again in ${minutesRemaining} minute(s).`,
+      );
+    }
+
     const isPasswordValid = await this.userService.validatePassword(
       loginDto.password,
       user.password,
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      // Record failed attempt
+      const attemptResult =
+        await this.accountLockoutService.recordFailedAttempt(
+          user.id,
+          ipAddress,
+          userAgent,
+          'Invalid password',
+        );
+
+      if (attemptResult.isLocked) {
+        const minutesLocked = Math.ceil(
+          (attemptResult.lockedUntil.getTime() - Date.now()) / (60 * 1000),
+        );
+
+        throw new UnauthorizedException(
+          `Account locked due to too many failed attempts. ` +
+            `Please try again in ${minutesLocked} minute(s).`,
+        );
+      }
+
+      throw new UnauthorizedException(
+        `Invalid credentials. ${attemptResult.remainingAttempts} attempt(s) remaining.`,
+      );
     }
 
     if (!user.isActive) {
+      await this.accountLockoutService.recordFailedAttempt(
+        user.id,
+        ipAddress,
+        userAgent,
+        'Account inactive',
+      );
+
       throw new UnauthorizedException('Account is inactive');
     }
     /*
     if (!user.isEmailVerified) {
+      await this.accountLockoutService.recordFailedAttempt(
+        user.id,
+        ipAddress,
+        userAgent,
+        'Email not verified',
+      );
       throw new UnauthorizedException('Please verify your email before logging in');
     }
     */
+
+    // Successful login - record it and reset failed attempts
+    await this.accountLockoutService.recordSuccessfulLogin(
+      user.id,
+      ipAddress,
+      userAgent,
+    );
 
     const tokens = await this.generateTokens(
       user.id,
@@ -109,6 +169,31 @@ export class AuthService {
         role: userWithoutPassword.role,
       },
     };
+  }
+
+  // Add method to get lockout status
+  async getAccountLockoutStatus(userId: string) {
+    return this.accountLockoutService.getLockoutStatus(userId);
+  }
+
+  // Add method to get login history
+  async getLoginHistory(userId: string, limit = 20) {
+    return this.accountLockoutService.getLoginHistory(userId, limit);
+  }
+
+  // Add admin method to unlock account
+  async unlockAccount(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    await this.accountLockoutService.unlockAccount(user.id);
+
+    return { message: 'Account unlocked successfully' };
   }
 
   async refreshTokens(

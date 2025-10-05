@@ -51,6 +51,14 @@ model User {
   provider   AuthProvider @default(LOCAL)
   avatar     String?
 
+  // Account Lockout Fields
+  failedLoginAttempts   Int            @default(0)
+  lockedUntil           DateTime?
+  lockReason            String?
+  lastFailedLoginAt     DateTime?
+  lastSuccessfulLoginAt DateTime?
+  loginHistory          LoginHistory[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -60,6 +68,7 @@ model User {
   @@index([email])
   @@index([emailVerificationToken])
   @@index([passwordResetToken])
+  @@index([lockedUntil])
   @@map("users")
 }
 
@@ -82,4 +91,24 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// New model for tracking login attempts
+model LoginHistory {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  success       Boolean
+  ipAddress     String?
+  userAgent     String?
+  deviceId      String?
+  failureReason String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([success])
+  @@map("login_history")
 }

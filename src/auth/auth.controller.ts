@@ -34,6 +34,13 @@ import {
   ValidateResetTokenDto,
 } from './dto/password-reset.dto';
 import { Throttle } from '@nestjs/throttler';
+import { Roles } from './decorator/role.decorator';
+import { Role } from '@prisma/generated/prisma';
+import { RolesGuard } from './guards/roles.guard';
+import {
+  AccountLockoutResponseDto,
+  UnlockAccountDto,
+} from './dto/account-lockout.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -401,5 +408,68 @@ export class AuthController {
     @Body() changePasswordDto: ChangePasswordDto,
   ) {
     return this.authService.changePassword(user.id, changePasswordDto);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('lockout-status')
+  @ApiOperation({
+    summary: 'Get account lockout status',
+    description:
+      'Check current account lockout status and failed login attempts',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account lockout status',
+    type: AccountLockoutResponseDto,
+  })
+  async getLockoutStatus(@CurrentUser() user: any) {
+    return this.authService.getAccountLockoutStatus(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get('login-history')
+  @ApiOperation({
+    summary: 'Get login history',
+    description: 'Retrieve recent login attempts for the authenticated user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Login history',
+    schema: {
+      example: [
+        {
+          timestamp: '2025-10-05T13:14:35.000Z',
+          ipAddress: '192.168.1.1',
+          userAgent: 'Mozilla/5.0...',
+          success: true,
+        },
+      ],
+    },
+  })
+  async getLoginHistory(@CurrentUser() user: any) {
+    return this.authService.getLoginHistory(user.id);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  @Post('admin/unlock-account')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Unlock user account (Admin only)',
+    description: 'Manually unlock a locked user account',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account unlocked successfully',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Admin access required',
+  })
+  async unlockAccount(@Body() unlockDto: UnlockAccountDto) {
+    return this.authService.unlockAccount(unlockDto.email);
   }
 }
