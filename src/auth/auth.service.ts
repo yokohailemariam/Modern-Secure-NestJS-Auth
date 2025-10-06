@@ -29,6 +29,7 @@ import {
 } from './dto/password-reset.dto';
 import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
 import { SessionService } from '@src/session/session.service';
+import { TwoFactorService } from '@src/two-factor/two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly accountLockoutService: AccountLockoutService,
     private readonly sessionService: SessionService,
+    private readonly twoFactorService: TwoFactorService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
@@ -66,6 +68,7 @@ export class AuthService {
     deviceId?: string,
     userAgent?: string,
     ipAddress?: string,
+    twoFactorCode?: string,
   ): Promise<AuthResponseDto> {
     const user = await this.userService.findByEmail(loginDto.email);
 
@@ -95,7 +98,6 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      // Record failed attempt
       const attemptResult =
         await this.accountLockoutService.recordFailedAttempt(
           user.id,
@@ -141,6 +143,48 @@ export class AuthService {
       throw new UnauthorizedException('Please verify your email before logging in');
     }
     */
+
+    // Check if 2FA is enabled
+    const is2FAEnabled = await this.twoFactorService.is2FAEnabled(user.id);
+
+    if (is2FAEnabled) {
+      // If 2FA code is not provided, inform client to request it
+      if (!twoFactorCode) {
+        return {
+          requires2FA: true,
+          accessToken: '',
+          refreshToken: '',
+          expiresIn: 0,
+          user: {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+          },
+        };
+      }
+
+      // Verify 2FA code
+      const is2FAValid = await this.twoFactorService.verify2FACode(
+        user.id,
+        twoFactorCode,
+      );
+
+      if (!is2FAValid) {
+        // Record failed attempt
+        await this.accountLockoutService.recordFailedAttempt(
+          user.id,
+          ipAddress,
+          userAgent,
+          'Invalid 2FA code',
+        );
+
+        throw new UnauthorizedException(
+          'Invalid two-factor authentication code',
+        );
+      }
+    }
 
     // Successful login - record it and reset failed attempts
     await this.accountLockoutService.recordSuccessfulLogin(

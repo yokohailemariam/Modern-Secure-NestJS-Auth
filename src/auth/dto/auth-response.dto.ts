@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/generated/prisma';
 
 export class AuthResponseDto {
@@ -10,6 +10,9 @@ export class AuthResponseDto {
 
   @ApiProperty()
   expiresIn: number;
+
+  @ApiPropertyOptional()
+  requires2FA?: boolean;
 
   @ApiProperty()
   user: {

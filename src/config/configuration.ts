@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export default () => ({
   port: parseInt(process.env.PORT, 10) || 3000,
   apiPrefix: process.env.API_PREFIX || 'api/v1',
@@ -18,15 +20,20 @@ export default () => ({
     },
   },
 
+  app: {
+    name: process.env.APP_NAME || 'Modern Secure Auth',
+  },
+
   security: {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS, 10) || 10,
+    encryptionKey:
+      process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex'),
 
-    // Account Lockout Configuration
     accountLockout: {
       maxAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS, 10) || 5,
-      lockDuration: parseInt(process.env.ACCOUNT_LOCK_DURATION, 10) || 15, // minutes
-      attemptWindow: parseInt(process.env.LOGIN_ATTEMPT_WINDOW, 10) || 15, // minutes
-      progressiveLockout: process.env.PROGRESSIVE_LOCKOUT === 'true', // Enable progressive lockout
+      lockDuration: parseInt(process.env.ACCOUNT_LOCK_DURATION, 10) || 15,
+      attemptWindow: parseInt(process.env.LOGIN_ATTEMPT_WINDOW, 10) || 15,
+      progressiveLockout: process.env.PROGRESSIVE_LOCKOUT === 'true',
     },
   },
 

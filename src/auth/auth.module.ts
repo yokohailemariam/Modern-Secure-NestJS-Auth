@@ -13,6 +13,7 @@ import { EmailModule } from '@src/email/email.module';
 import { ConfigModule } from '@nestjs/config';
 import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
 import { SessionModule } from '@src/session/session.module';
+import { TwoFactorModule } from '@src/two-factor/two-factor.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { SessionModule } from '@src/session/session.module';
     EmailModule,
     ConfigModule,
     SessionModule,
+    TwoFactorModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
   ],

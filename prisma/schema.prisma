@@ -22,6 +22,22 @@ enum AuthProvider {
   GITHUB
 }
 
+enum TwoFactorMethod {
+  TOTP // Time-based One-Time Password (Google Authenticator, Authy, etc.)
+  SMS
+  EMAIL
+}
+
+enum AuditAction {
+  // Two-Factor Authentication
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_DISABLED
+  TWO_FACTOR_VERIFIED
+  TWO_FACTOR_VERIFICATION_FAILED
+  TWO_FACTOR_BACKUP_CODE_USED
+  TWO_FACTOR_BACKUP_CODES_REGENERATED
+}
+
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
@@ -42,6 +58,14 @@ model User {
   passwordResetAttempts        Int       @default(0)
   passwordResetAttemptsExpires DateTime?
   passwordChangedAt            DateTime?
+
+  // Two-Factor Authentication Fields
+  twoFactorEnabled     Boolean         @default(false) @map("two_factor_enabled")
+  twoFactorSecret      String?         @map("two_factor_secret") // Encrypted TOTP secret
+  twoFactorBackupCodes String[]        @default([]) @map("two_factor_backup_codes") // Encrypted backup codes
+  twoFactorEnabledAt   DateTime?       @map("two_factor_enabled_at")
+  twoFactorLastUsedAt  DateTime?       @map("two_factor_last_used_at")
+  twoFactorMethod      TwoFactorMethod @default(TOTP) @map("two_factor_method")
 
   // OAuth fields
   googleId   String?      @unique

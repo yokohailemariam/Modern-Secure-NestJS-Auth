@@ -14,6 +14,7 @@ import { EmailModule } from './email/email.module';
 import { SessionService } from './session/session.service';
 import { SessionController } from './session/session.controller';
 import { SessionModule } from './session/session.module';
+import { TwoFactorModule } from './two-factor/two-factor.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SessionModule } from './session/session.module';
     UserModule,
     EmailModule,
     SessionModule,
+    TwoFactorModule,
   ],
   providers: [
     {

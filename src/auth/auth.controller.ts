@@ -74,8 +74,30 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
+  @ApiResponse({
+    status: 200,
+    description: 'Successful login or 2FA required',
+    schema: {
+      oneOf: [
+        {
+          properties: {
+            accessToken: { type: 'string' },
+            expiresIn: { type: 'number' },
+            user: { type: 'object' },
+          },
+        },
+        {
+          properties: {
+            requires2FA: { type: 'boolean', example: true },
+            user: { type: 'object' },
+          },
+        },
+      ],
+    },
+  })
   async login(
     @Body() loginDto: LoginDto,
+    @Body('twoFactorCode') twoFactorCode: string,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -88,7 +110,17 @@ export class AuthController {
       deviceId,
       userAgent,
       ipAddress,
+      twoFactorCode,
     );
+
+    // If 2FA is required, don't set refresh token
+    if (result.requires2FA) {
+      return {
+        requires2FA: true,
+        message: 'Two-factor authentication required',
+        user: result.user,
+      };
+    }
 
     this.setRefreshTokenCookie(res, result.refreshToken);
 
