@@ -11,6 +11,9 @@ import { TransformInterceptor } from './common/interfceptors/transform.interfcep
 import { PrismaModule } from '@prisma/prisma.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EmailModule } from './email/email.module';
+import { SessionService } from './session/session.service';
+import { SessionController } from './session/session.controller';
+import { SessionModule } from './session/session.module';
 
 @Module({
   imports: [
@@ -41,6 +44,7 @@ import { EmailModule } from './email/email.module';
     AuthModule,
     UserModule,
     EmailModule,
+    SessionModule,
   ],
   providers: [
     {
@@ -55,6 +59,8 @@ import { EmailModule } from './email/email.module';
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
     },
+    SessionService,
   ],
+  controllers: [SessionController],
 })
 export class AppModule {}

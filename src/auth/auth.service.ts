@@ -28,6 +28,7 @@ import {
   ValidateResetTokenDto,
 } from './dto/password-reset.dto';
 import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
+import { SessionService } from '@src/session/session.service';
 
 @Injectable()
 export class AuthService {
@@ -38,6 +39,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly accountLockoutService: AccountLockoutService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async register(registerDto: RegisterDto): Promise<AuthResponseDto> {
@@ -203,6 +205,8 @@ export class AuthService {
     userAgent?: string,
     ipAddress?: string,
   ): Promise<Tokens & { expiresIn: number }> {
+    await this.sessionService.updateLastUsed(tokenId);
+
     await this.revokeRefreshToken(tokenId);
 
     const user = await this.userService.findById(userId);
@@ -283,9 +287,31 @@ export class AuthService {
       expiresIn: refreshTokenExpiration,
     });
 
+    const sessionId = await this.sessionService.createSession(
+      userId,
+      refreshToken,
+      expiresAt,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    const finalRefreshTokenPayload: JwtRefreshPayload = {
+      sub: userId,
+      tokenId: sessionId,
+    };
+
+    const finalRefreshToken = await this.jwtService.signAsync(
+      finalRefreshTokenPayload,
+      {
+        secret: this.config.get<string>('jwt.refresh.secret'),
+        expiresIn: refreshTokenExpiration,
+      },
+    );
+
     await this.prisma.refreshToken.update({
       where: { id: refreshTokenRecord.id },
-      data: { token: refreshToken },
+      data: { token: finalRefreshToken },
     });
 
     const expiresIn = this.parseExpirationToSeconds(
@@ -294,7 +320,7 @@ export class AuthService {
 
     return {
       accessToken,
-      refreshToken,
+      refreshToken: finalRefreshToken,
       expiresIn,
     };
   }

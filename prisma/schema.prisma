@@ -80,6 +80,15 @@ model RefreshToken {
   userAgent String? @map("user_agent")
   ipAddress String? @map("ip_address")
 
+  // Enhanced session information
+  deviceName String?   @map("device_name")
+  deviceType String?   @map("device_type")
+  browser    String?
+  os         String?
+  location   Json?
+  lastUsedAt DateTime? @map("last_used_at")
+  isCurrent  Boolean   @default(false) @map("is_current")
+
   expiresAt DateTime  @map("expires_at")
   createdAt DateTime  @default(now()) @map("created_at")
   isRevoked Boolean   @default(false) @map("is_revoked")
@@ -90,10 +99,11 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
+  @@index([deviceId])
+  @@index([lastUsedAt])
   @@map("refresh_tokens")
 }
 
-// New model for tracking login attempts
 model LoginHistory {
   id     String @id @default(uuid())
   userId String

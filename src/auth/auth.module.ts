@@ -12,12 +12,14 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { EmailModule } from '@src/email/email.module';
 import { ConfigModule } from '@nestjs/config';
 import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
+import { SessionModule } from '@src/session/session.module';
 
 @Module({
   imports: [
     UserModule,
     EmailModule,
     ConfigModule,
+    SessionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
   ],
