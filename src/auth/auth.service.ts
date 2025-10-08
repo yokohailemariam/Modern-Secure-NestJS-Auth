@@ -976,4 +976,131 @@ export class AuthService {
       isNewUser,
     };
   }
+
+  /**
+   * Facebook OAuth Login
+   */
+  async facebookLogin(
+    socialAuthDto: SocialAuthDto,
+    deviceId?: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ): Promise<SocialAuthResponseDto> {
+    let user = await this.prisma.user.findUnique({
+      where: { facebookId: socialAuthDto.facebookId },
+    });
+
+    let isNewUser = false;
+
+    // If user doesn't exist with Facebook ID, check by email
+    if (!user) {
+      user = await this.prisma.user.findUnique({
+        where: { email: socialAuthDto.email },
+      });
+
+      if (user) {
+        // Link Facebook account to existing user
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            facebookId: socialAuthDto.facebookId,
+            avatar: socialAuthDto.avatar || user.avatar,
+            firstName: user.firstName || socialAuthDto.firstName,
+            lastName: user.lastName || socialAuthDto.lastName,
+          },
+        });
+      } else {
+        // Create new user
+        user = await this.prisma.user.create({
+          data: {
+            email: socialAuthDto.email,
+            facebookId: socialAuthDto.facebookId,
+            firstName: socialAuthDto.firstName,
+            lastName: socialAuthDto.lastName,
+            avatar: socialAuthDto.avatar,
+            provider: 'FACEBOOK',
+            isActive: true,
+            role: 'USER',
+            password: '',
+            isEmailVerified: true,
+          },
+        });
+        isNewUser = true;
+      }
+    }
+
+    // Check if account is active
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is inactive');
+    }
+
+    // Generate tokens
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        avatar: user.avatar,
+        provider: user.provider,
+      },
+      isNewUser,
+    };
+  }
+
+  /**
+   * Find user by Facebook ID
+   */
+  async findUserByFacebookId(facebookId: string) {
+    return this.prisma.user.findUnique({
+      where: { facebookId },
+    });
+  }
+
+  /**
+   * Link Facebook account to existing user
+   */
+  async linkFacebookAccount(userId: string, facebookId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        facebookId,
+        provider: 'FACEBOOK',
+      },
+    });
+  }
+
+  /**
+   * Unlink Facebook account
+   */
+  async unlinkFacebookAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user.password && user.provider === 'FACEBOOK') {
+      throw new BadRequestException(
+        'Cannot unlink Facebook account. Please set a password first to maintain account access.',
+      );
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        facebookId: null,
+        provider: user.password ? 'LOCAL' : user.provider,
+      },
+    });
+  }
 }

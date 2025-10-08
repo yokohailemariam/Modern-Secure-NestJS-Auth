@@ -8,6 +8,8 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -25,7 +27,7 @@ import { ConfigService } from '@nestjs/config';
 import { Public } from './decorator/public.decorator';
 import { CurrentUser } from './decorator/current-user.decorator';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
-import { SocialAuthDto } from './dto/social-auth.dto';
+import { SocialAuthDto, SocialAuthResponseDto } from './dto/social-auth.dto';
 import { ResendVerificationDto, VerifyEmailDto } from './dto/verify-email.dto';
 import {
   ChangePasswordDto,
@@ -41,7 +43,8 @@ import {
   AccountLockoutResponseDto,
   UnlockAccountDto,
 } from './dto/account-lockout.dto';
-import { GitHubAuthGuard } from './guards/github.strategy';
+import { GitHubAuthGuard } from './guards/github.guard';
+import { FacebookAuthGuard } from './guards/facebook.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -590,6 +593,181 @@ export class AuthController {
       expiresIn: result.expiresIn,
       user: result.user,
       isNewUser: result.isNewUser,
+    };
+  }
+
+  @Public()
+  @Get('facebook')
+  @UseGuards(FacebookAuthGuard)
+  @ApiOperation({ summary: 'Initiate Facebook OAuth login' })
+  @ApiTags('OAuth')
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Facebook authorization page',
+  })
+  async facebookAuth() {
+    // Guard redirects to Facebook
+  }
+
+  @Public()
+  @Get('facebook/callback')
+  @UseGuards(FacebookAuthGuard)
+  @ApiOperation({ summary: 'Facebook OAuth callback' })
+  @ApiTags('OAuth')
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to frontend with authentication token',
+  })
+  async facebookAuthCallback(
+    @CurrentUser() user: any,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const socialAuthDto: SocialAuthDto = {
+      facebookId: user.facebookId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.avatar,
+      provider: 'FACEBOOK',
+    };
+
+    try {
+      const result = await this.authService.facebookLogin(
+        socialAuthDto,
+        deviceId,
+        userAgent,
+        ipAddress,
+      );
+
+      this.setRefreshTokenCookie(res, result.refreshToken);
+
+      // Redirect to frontend with token
+      const frontendUrl = this.config.get<string>('frontendUrl');
+      return res.redirect(
+        `${frontendUrl}/auth/callback?token=${result.accessToken}&isNewUser=${result.isNewUser}&provider=facebook`,
+      );
+    } catch (error) {
+      const frontendUrl = this.config.get<string>('frontendUrl');
+      return res.redirect(
+        `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message)}&provider=facebook`,
+      );
+    }
+  }
+
+  // Alternative: API endpoint for mobile/SPA apps
+  @Public()
+  @Post('facebook/token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange Facebook token for app tokens',
+    description: 'For mobile/SPA apps using Facebook SDK',
+  })
+  @ApiTags('OAuth')
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully authenticated with Facebook',
+    type: SocialAuthResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Authentication failed',
+  })
+  async facebookTokenLogin(
+    @Body() socialAuthDto: SocialAuthDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const result = await this.authService.facebookLogin(
+      socialAuthDto,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    this.setRefreshTokenCookie(res, result.refreshToken);
+
+    return {
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      user: result.user,
+      isNewUser: result.isNewUser,
+    };
+  }
+
+  // Link Facebook account
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post('link/facebook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Link Facebook account to existing user',
+    description: 'Link Facebook OAuth to currently authenticated user',
+  })
+  @ApiTags('OAuth')
+  @ApiResponse({
+    status: 200,
+    description: 'Facebook account linked successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Facebook account already linked to another user',
+  })
+  async linkFacebookAccount(
+    @CurrentUser() user: any,
+    @Body() linkDto: { facebookId: string },
+  ) {
+    // Check if Facebook ID is already linked
+    const existingUser = await this.authService.findUserByFacebookId(
+      linkDto.facebookId,
+    );
+
+    if (existingUser && existingUser.id !== user.id) {
+      throw new BadRequestException(
+        'This Facebook account is already linked to another user',
+      );
+    }
+
+    // Link Facebook account
+    await this.authService.linkFacebookAccount(user.id, linkDto.facebookId);
+
+    return {
+      message: 'Facebook account linked successfully',
+      provider: 'FACEBOOK',
+    };
+  }
+
+  // Unlink Facebook account
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete('unlink/facebook')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Unlink Facebook account',
+    description: 'Remove Facebook OAuth link from user account',
+  })
+  @ApiTags('OAuth')
+  @ApiResponse({
+    status: 200,
+    description: 'Facebook account unlinked successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot unlink - set a password first',
+  })
+  async unlinkFacebookAccount(@CurrentUser() user: any) {
+    await this.authService.unlinkFacebookAccount(user.id);
+
+    return {
+      message: 'Facebook account unlinked successfully',
     };
   }
 }

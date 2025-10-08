@@ -15,6 +15,7 @@ import { AccountLockoutService } from '@src/account-lockout/account-lockout.serv
 import { SessionModule } from '@src/session/session.module';
 import { TwoFactorModule } from '@src/two-factor/two-factor.module';
 import { GitHubStrategy } from './strategies/github.strategy';
+import { FacebookStrategy } from './strategies/facebook.strategy';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { GitHubStrategy } from './strategies/github.strategy';
     GoogleStrategy,
     AccountLockoutService,
     GitHubStrategy,
+    FacebookStrategy,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

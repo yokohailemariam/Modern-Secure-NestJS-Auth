@@ -95,6 +95,7 @@ model User {
   @@index([lockedUntil])
   @@index([googleId])
   @@index([githubId])
+  @@index([facebookId])
   @@map("users")
 }
 
