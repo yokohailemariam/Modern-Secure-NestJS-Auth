@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AccountLockoutService } from '@src/account-lockout/account-lockout.service';
 import { SessionModule } from '@src/session/session.module';
 import { TwoFactorModule } from '@src/two-factor/two-factor.module';
+import { GitHubStrategy } from './strategies/github.strategy';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { TwoFactorModule } from '@src/two-factor/two-factor.module';
     JwtRefreshStrategy,
     GoogleStrategy,
     AccountLockoutService,
+    GitHubStrategy,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

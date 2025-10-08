@@ -52,6 +52,12 @@ export default () => ({
       callbackUrl: process.env.GOOGLE_CALLBACK_URL,
     },
 
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      callbackUrl: process.env.GITHUB_CALLBACK_URL,
+    },
+
     facebook: {
       clientId: process.env.FACEBOOK_CLIENT_ID,
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,

@@ -41,6 +41,7 @@ import {
   AccountLockoutResponseDto,
   UnlockAccountDto,
 } from './dto/account-lockout.dto';
+import { GitHubAuthGuard } from './guards/github.strategy';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -503,5 +504,92 @@ export class AuthController {
   })
   async unlockAccount(@Body() unlockDto: UnlockAccountDto) {
     return this.authService.unlockAccount(unlockDto.email);
+  }
+
+  @Public()
+  @Get('github')
+  @UseGuards(GitHubAuthGuard)
+  @ApiOperation({ summary: 'Initiate GitHub OAuth login' })
+  @ApiTags('OAuth')
+  async githubAuth() {
+    // Guard redirects to GitHub
+  }
+
+  @Public()
+  @Get('github/callback')
+  @UseGuards(GitHubAuthGuard)
+  @ApiOperation({ summary: 'GitHub OAuth callback' })
+  @ApiTags('OAuth')
+  async githubAuthCallback(
+    @CurrentUser() user: any,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const socialAuthDto: SocialAuthDto = {
+      githubId: user.githubId,
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.avatar,
+      provider: 'GITHUB',
+    };
+
+    try {
+      const result = await this.authService.githubLogin(
+        socialAuthDto,
+        deviceId,
+        userAgent,
+        ipAddress,
+      );
+
+      this.setRefreshTokenCookie(res, result.refreshToken);
+
+      const frontendUrl = this.config.get<string>('frontendUrl');
+      return res.redirect(
+        `${frontendUrl}/auth/callback?token=${result.accessToken}&isNewUser=${result.isNewUser}&provider=github`,
+      );
+    } catch (error) {
+      const frontendUrl = this.config.get<string>('frontendUrl');
+      return res.redirect(
+        `${frontendUrl}/auth/error?message=${encodeURIComponent(error.message)}&provider=github`,
+      );
+    }
+  }
+
+  // Alternative: API endpoint for mobile/SPA apps
+  @Public()
+  @Post('github/token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange GitHub token for app tokens' })
+  @ApiTags('OAuth')
+  async githubTokenLogin(
+    @Body() socialAuthDto: SocialAuthDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const deviceId = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+    const ipAddress = req.ip;
+
+    const result = await this.authService.githubLogin(
+      socialAuthDto,
+      deviceId,
+      userAgent,
+      ipAddress,
+    );
+
+    this.setRefreshTokenCookie(res, result.refreshToken);
+
+    return {
+      accessToken: result.accessToken,
+      expiresIn: result.expiresIn,
+      user: result.user,
+      isNewUser: result.isNewUser,
+    };
   }
 }

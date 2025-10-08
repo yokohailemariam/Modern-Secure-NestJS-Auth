@@ -1,23 +1,29 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/generated/prisma';
 
 export class SocialAuthDto {
-  @ApiProperty()
+  @ApiPropertyOptional()
   googleId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   facebookId?: string;
+
+  @ApiPropertyOptional()
+  githubId?: string;
+
+  @ApiPropertyOptional()
+  username?: string;
 
   @ApiProperty()
   email: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   firstName?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   lastName?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   avatar?: string;
 
   @ApiProperty()
@@ -43,6 +49,7 @@ export class SocialAuthResponseDto {
     role: Role;
     avatar?: string;
     provider: string;
+    username?: string;
   };
 
   @ApiProperty()

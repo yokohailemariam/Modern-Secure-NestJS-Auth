@@ -93,6 +93,8 @@ model User {
   @@index([emailVerificationToken])
   @@index([passwordResetToken])
   @@index([lockedUntil])
+  @@index([googleId])
+  @@index([githubId])
   @@map("users")
 }
 
